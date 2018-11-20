@@ -30,7 +30,7 @@ router.get('/si/suggestions', function(req, res, next) {
             receiverBank:  sortedArray[0].bankName,
             receiverAccountNumber: sortedArray[0].accountNumber,
             receiverAer: sortedArray[0].interestRate,
-            amount: sortedArray[0].balance - sortedArray[0].minBalance - sortedArray[0].standingInst
+            amount: Math.abs(parseInt(sortedArray[0].balance) - parseInt(sortedArray[0].minBalance) - parseInt(sortedArray[0].standingInst))
           }
         ]
       })
@@ -47,8 +47,32 @@ router.post('/si/suggestions', function(req, res, next) {
     var userName = decodedObj.username;
     request.get(serviceUrlConfig.dbUrl+'/'+userName+'-debit', function(err, response, body){
       if(err) return res.status(500).json({ message: 'Failed to load data'})
-      console.log(body, postData.transfers);
-      console.log("modify get data and then post it");
+      // console.log(body, postData.transfers);
+      postData.transfers.map((obj)=>{
+        var filteredSenderBank = body.banks.filter((bank)=>{
+          return bank.bankName == obj.senderBank;
+        })[0];
+        var filteredReceiverBank = body.banks.filter((bank)=>{
+          return bank.bankName == obj.receiverBank;
+        })[0];
+        var restBankDetails = body.banks.filter((bank)=>{
+          return bank.bankName != obj.receiverBank && bank.bankName != obj.senderBank;
+        });
+        filteredSenderBank.accounts[0].balance = parseInt(filteredSenderBank.accounts[0].balance) - parseInt(obj.amount);
+        filteredReceiverBank.accounts[0].balance = parseInt(filteredReceiverBank.accounts[0].balance) + parseInt(obj.amount);
+        body.banks = [...restBankDetails, filteredReceiverBank, filteredSenderBank];
+      });
+      request.patch({
+        url: serviceUrlConfig.dbUrl+'/'+userName+'-debit',
+        body: {
+          'banks': body.banks
+        },
+        json: true
+      }, function(err, response, body){
+        if(err) return res.status(500).json({ message: 'Failed to patch data'})
+        console.log(body);
+        res.status(200).json(body);
+      })
     })
   });
 })
