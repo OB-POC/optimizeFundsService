@@ -13,7 +13,7 @@ router.get('/si/suggestions', function(req, res, next) {
     var userName = decodedObj.username;
     request.get(serviceUrlConfig.dbUrl+'/'+userName+'-debit', function(err, response, body){
       if(err) return res.status(500).json({ message: 'Failed to load data'})
-      console.log(body);
+      // console.log(body);
       var accountsArray = JSON.parse(body)['banks'].map((bank)=>{
         bank.accounts[0].bankName = bank.bankName;
         return bank.accounts[0]
@@ -21,18 +21,21 @@ router.get('/si/suggestions', function(req, res, next) {
       var sortedArray = accountsArray.sort((a,b)=>{
         return a.interestRate-b.interestRate;
       });
+      console.log(sortedArray);
       res.status(200).json({
-        transfers: [
+        senders: [
           {
-            senderBank: sortedArray[1].bankName,
-            senderAccountNumber: sortedArray[1].accountNumber,
-            senderAer: sortedArray[1].interestRate,
-            receiverBank:  sortedArray[0].bankName,
-            receiverAccountNumber: sortedArray[0].accountNumber,
-            receiverAer: sortedArray[0].interestRate,
-            amount: Math.abs(parseInt(sortedArray[0].balance) - parseInt(sortedArray[0].minBalance) - parseInt(sortedArray[0].standingInst))
+            senderBank: sortedArray[0].bankName,
+            senderAccountNumber: sortedArray[0].accountNumber,
+            senderAer: sortedArray[0].interestRate,
+            amount: Math.abs(parseInt(sortedArray[1].balance) - parseInt(sortedArray[1].minBalance) - parseInt(sortedArray[1].standingInst))
           }
-        ]
+        ],
+        receiver: {
+          receiverBank: sortedArray[1].bankName,
+          receiverAccountNumber: sortedArray[1].accountNumber,
+          receiverAer: sortedArray[1].interestRate
+        }
       })
     })
   });
@@ -48,24 +51,27 @@ router.post('/si/suggestions', function(req, res, next) {
     request.get(serviceUrlConfig.dbUrl+'/'+userName+'-debit', function(err, response, body){
       if(err) return res.status(500).json({ message: 'Failed to load data'})
       // console.log(body, postData.transfers);
-      postData.transfers.map((obj)=>{
-        var filteredSenderBank = body.banks.filter((bank)=>{
+      var data = JSON.parse(body);
+      postData.senders.map((obj)=>{
+        var filteredSenderBank = data.banks.filter((bank)=>{
           return bank.bankName == obj.senderBank;
         })[0];
-        var filteredReceiverBank = body.banks.filter((bank)=>{
-          return bank.bankName == obj.receiverBank;
+        var filteredReceiverBank = data.banks.filter((bank)=>{
+          return bank.bankName == postData.receiver.receiverBank
         })[0];
-        var restBankDetails = body.banks.filter((bank)=>{
-          return bank.bankName != obj.receiverBank && bank.bankName != obj.senderBank;
+        var restBankDetails = data.banks.filter((bank)=>{
+          return bank.bankName != postData.receiver.receiverBank && bank.bankName != obj.senderBank;
         });
         filteredSenderBank.accounts[0].balance = parseInt(filteredSenderBank.accounts[0].balance) - parseInt(obj.amount);
         filteredReceiverBank.accounts[0].balance = parseInt(filteredReceiverBank.accounts[0].balance) + parseInt(obj.amount);
-        body.banks = [...restBankDetails, filteredReceiverBank, filteredSenderBank];
+        filteredReceiverBank.accounts[0].availableBalance = 0
+        filteredReceiverBank.accounts[0].standingInstructions.map((obj)=>obj.canClear=true);
+        data.banks = [...restBankDetails, filteredReceiverBank, filteredSenderBank];
       });
       request.patch({
         url: serviceUrlConfig.dbUrl+'/'+userName+'-debit',
         body: {
-          'banks': body.banks
+          'banks': data.banks
         },
         json: true
       }, function(err, response, body){
@@ -85,8 +91,35 @@ router.post('/mergeFunds', function(req, res, next) {
     var userName = decodedObj.username;
     request.get(serviceUrlConfig.dbUrl+'/'+userName+'-debit', function(err, response, body){
       if(err) return res.status(500).json({ message: 'Failed to load data'})
-      console.log(body, postData);
-      console.log("modify get data and then post it")
+      // console.log(body, postData.transfers);
+      var data = JSON.parse(body);
+      postData.senders.map((obj)=>{
+        var filteredSenderBank = data.banks.filter((bank)=>{
+          return bank.bankName == obj.senderBank;
+        })[0];
+        var filteredReceiverBank = data.banks.filter((bank)=>{
+          return bank.bankName == postData.receiver.receiverBank
+        })[0];
+        var restBankDetails = data.banks.filter((bank)=>{
+          return bank.bankName != postData.receiver.receiverBank && bank.bankName != obj.senderBank;
+        });
+        filteredSenderBank.accounts[0].balance = parseInt(filteredSenderBank.accounts[0].balance) - parseInt(filteredSenderBank.accounts[0].availableBalance);
+        filteredReceiverBank.accounts[0].balance = parseInt(filteredReceiverBank.accounts[0].balance) + parseInt(filteredSenderBank.accounts[0].availableBalance);
+        filteredSenderBank.accounts[0].availableBalance = 0;
+        filteredReceiverBank.accounts[0].availableBalance += filteredSenderBank.accounts[0].availableBalance;
+        data.banks = [...restBankDetails, filteredReceiverBank, filteredSenderBank];
+      });
+      request.patch({
+        url: serviceUrlConfig.dbUrl+'/'+userName+'-debit',
+        body: {
+          'banks': data.banks
+        },
+        json: true
+      }, function(err, response, body){
+        if(err) return res.status(500).json({ message: 'Failed to patch data'})
+        console.log(body);
+        res.status(200).json(body);
+      })
     })
   });
 })
