@@ -105,8 +105,8 @@ router.post('/mergeFunds', function(req, res, next) {
         });
         filteredSenderBank.accounts[0].balance = parseInt(filteredSenderBank.accounts[0].balance) - parseInt(filteredSenderBank.accounts[0].availableBalance);
         filteredReceiverBank.accounts[0].balance = parseInt(filteredReceiverBank.accounts[0].balance) + parseInt(filteredSenderBank.accounts[0].availableBalance);
-        filteredSenderBank.accounts[0].availableBalance = 0;
         filteredReceiverBank.accounts[0].availableBalance += filteredSenderBank.accounts[0].availableBalance;
+        filteredSenderBank.accounts[0].availableBalance = 0;
         data.banks = [...restBankDetails, filteredReceiverBank, filteredSenderBank];
       });
       request.patch({
