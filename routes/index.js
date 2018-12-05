@@ -28,13 +28,13 @@ router.get('/si/suggestions', function(req, res, next) {
             senderBank: sortedArray[0].bankName,
             senderAccountNumber: sortedArray[0].accountNumber,
             senderAer: sortedArray[0].interestRate,
-            amount: Math.abs(parseInt(sortedArray[1].balance) - parseInt(sortedArray[1].minBalance) - parseInt(sortedArray[1].standingInst))
+            amount: sortedArray[1] && Math.abs(parseInt(sortedArray[1].balance) - parseInt(sortedArray[1].minBalance) - parseInt(sortedArray[1].standingInst))
           }
         ],
         receiver: {
-          receiverBank: sortedArray[1].bankName,
-          receiverAccountNumber: sortedArray[1].accountNumber,
-          receiverAer: sortedArray[1].interestRate
+          receiverBank: sortedArray[1] && sortedArray[1].bankName,
+          receiverAccountNumber: sortedArray[1] && sortedArray[1].accountNumber,
+          receiverAer: sortedArray[1] && sortedArray[1].interestRate
         }
       })
     })
